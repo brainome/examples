@@ -1,0 +1,12 @@
+---
+data_paths: ["../DCASE/", "../amicorpus/", "../fma_medium/"]
+save_path: ../datadir/bar/
+alpha: 0.0125
+beta: 0.0125
+n_interleavings: 4
+n_mfcc: 20
+start_index: 1
+sampling_rate: 16000
+n_mels: 256
+fmax: null
+delete: True
