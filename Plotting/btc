@@ -1,0 +1,107 @@
+#! /bin/bash
+
+# ============================================================
+# Daimensions Docker Linux and MacOS Batch Script
+#
+# This code is copyrighted (c) 2020 by Brainome, Inc. All Rights Reserved.
+# Please contact support@brainome.ai with any questions.
+#
+# Usage: 
+#   btc-docker -update            : update to latest version
+#   btc-docker -update-beta       : update to beta version
+#   btc-docker arg1 [arg2 [...]]  : run Daimensions with arguments
+# ============================================================
+
+USER=`whoami | tr '[A-Z]' '[a-z]'`
+OS=`uname -s`
+if [ -z ${GID+x} ]; then GID=`id -g` ; fi
+if [ -z ${UID+x} ]; then UID=`id -u` ; fi
+
+DOCKERIMAGE=brainome/btc_local_gpu:latest
+USERIMAGE=btc-$USER
+UPDATE=0
+
+# ============================================================
+# Check that docker is installed
+# ============================================================
+if ! command -v docker &> /dev/null
+then
+    echo "docker is not installed on this machine."
+    echo "Please install first and restart this script."
+    exit
+fi
+
+# Check if user wants to update 
+if [ $# -eq 1 ] && [ $1 = "-update" ]; then UPDATE=1; fi
+
+# Check if user wants to update to a beta release
+if [ $# -eq 1 ] && [ $1 = "-update-beta" ]; then
+    DOCKERIMAGE=brainome/btc_local_gpu:beta
+    UPDATE=1
+fi
+
+# ============================================================
+# If the user image is missing, have the user run -update
+# ============================================================
+if [ $UPDATE -eq 0 ] && [[ "$(docker images -q $USERIMAGE 2> /dev/null)" == "" ]]; then
+  echo "The docker image $USERIMAGE is not present on this machine."
+  echo "Please run: btc-docker -update"
+  exit 1
+fi 
+
+# ============================================================
+# Update Daimensions docker image if needed
+# ============================================================
+if  [ $UPDATE -eq 1 ]; then
+    echo "Updating $DOCKERIMAGE"
+    docker pull $DOCKERIMAGE
+    if [[ "$(docker images -q $DOCKERIMAGE 2> /dev/null)" == "" ]]; then
+        echo "Docker image $DOCKERIMAGE was not created properly. Terminating"
+        echo "Make sure that your docker credential are authorized by Brainome."
+        exit 1
+    fi 
+
+    # After an install, we delete the user image and rebuild it
+    if [[ "$(docker images -q $USERIMAGE 2> /dev/null)" != "" ]]; then
+        echo "Deleting user docker image $USERIMAGE"
+        docker rmi $USERIMAGE
+    fi
+
+    echo "Creating user docker image $USERIMAGE"
+    if [ $OS = 'Darwin' ]; then
+        docker tag $DOCKERIMAGE $USERIMAGE
+    else
+        if [[ "$(docker images -q $USERIMAGE 2> /dev/null)" == "" ]]; then
+            tmpdocker="btcdocker.$$"
+            # do something
+            echo "FROM $DOCKERIMAGE" >> $tmpdocker
+            echo "USER root" >> $tmpdocker
+            groups="0 1 2 3 4 5 6 7 8 9 10 12 13 15 20 21 22 24 25 26 27 29 30 33 34 37 38 39 40 41 42 43 44 45 46 50 60 100 101 65534"
+            if ! [[ $groups =~ (^|[[:space:]])$GID($|[[:space:]]) ]] ; then
+                echo "RUN addgroup --gid $GID $USER" >> $tmpdocker
+            fi 
+            echo "RUN adduser --disabled-password --gecos '' --uid $UID --gid $GID $USER"  >> $tmpdocker
+            echo "USER $USER" >> $tmpdocker
+            docker build -t $USERIMAGE -f $tmpdocker .  >> /dev/null
+            rm $tmpdocker
+        fi
+    fi
+  
+    if [[ "$(docker images -q $USERIMAGE 2> /dev/null)" == "" ]]; then
+        echo "Docker image $USERIMAGE was not created properly. Terminating"
+        exit 1
+    fi
+
+    echo "Docker image $USERIMAGE was created successfully."
+
+    if [ $UPDATE -eq 1 ]; then exit 1; fi
+fi
+  
+# Check for GPU
+usegpu=""
+if [ -x /usr/bin/nvidia-smi ] ; then
+  gpucount=`/usr/bin/nvidia-smi -L | grep "GPU" | wc -l `
+  if [ $gpucount -gt 0 ] ; then usegpu="--gpus all" ; fi
+fi
+    
+docker run --rm $usegpu -it --mount type=bind,source="`pwd`",target=/btc $USERIMAGE $*
