@@ -1,0 +1,273 @@
+#! /bin/bash
+# ============================================================
+# Daimensions Docker Linux and MacOS Batch Script
+#
+# This code is copyrighted (c) 2020,2021 by Brainome, Inc. All Rights Reserved.
+# Please contact support@brainome.ai with any questions.
+#
+: '
+Usage:
+   btc-docker -update            : update to latest version
+   btc-docker -update -image brainome/btc_local_cpu:beta      : update to beta cpu version
+   btc-docker -update -offline   : update to latest version without contacting docker hub
+   btc-docker arg1 [arg2 [...]]  : run Daimensions with arguments
+
+   -update     forces update
+   -image TAG  names docker image tag (on update)
+   -offline    runs update in offline mode, does not pull
+
+Error codes:
+   255  docker is not installed
+   99   terms not accepted
+   254  docker image not created properly
+'
+# ============================================================
+USER=$(whoami | tr '[:upper:]' '[:lower:]')
+OS=$(uname -s)
+if [ -z ${GID+x} ]; then GID=$(id -g) ; fi
+if [ -z ${UID+x} ]; then UID=$(id -u) ; fi
+USE_GPU=false
+IS_HEADLESS=false       # no user prompts
+IS_OFFLINE=false        # impacts docker pull
+DOCKERIMAGE=brainome/btc_local_gpu:latest
+USERIMAGE="btc-$USER:latest"
+USER_HOME="/btc-$USER"
+USER_CONT_NAME="btc-$USER-$$"
+UPDATE=false            # force update rather than run btc
+RUN_AFTER_UPDATE=false	# run after updating (likely missing image)
+SETTINGS_FILE="$HOME/.daimensions"
+KEY_FILE=.daimensions.key
+TERMS_ACCEPT=false
+TERMS_PROMPT1a="Thank you for choosing Brainome's BTC data compiler."
+TERMS_PROMPT1b="Please read our Terms of Service at https://www.brainome.ai/terms-of-service"
+TERMS_PROMPT2="Do you wish to accept Brainome's Terms of Service? (y/n):  "
+#-----------
+# installation/execution steps
+#-----------
+function main() {
+  is_headless           # determine if script is running in headless mode
+  is_offline "$@"         # check for -offline ness
+  is_docker_installed   # check docker installed -> fail 255 if not
+  load_local_settings   # load local setting file
+  check_terms           # check terms and conditions accepted or is_headless -> fail 99 if not
+  check_update "$@"       # check if -update parameter is called for
+  debug " UPDATE=$UPDATE"
+  if [[ $UPDATE = true ]]; then
+    update_btc "$@" ;
+	if [[ $RUN_AFTER_UPDATE = true ]]; then
+		run_btc "$@" ;		# user expected to run, not just update...
+	fi
+  else
+    run_btc "$@" ;
+  fi
+}
+#-----------
+# to debug or not to debug
+function debug() {
+  if [ -n "$BTCDEBUG" ]; then
+    echo "DEBUG: $*"
+  fi
+}
+#-----------
+# check if the script is run headless mode
+function is_headless() {
+  if [[ /dev/stdin -ef /dev/null ]]; then   # 0 = true, 1 = false
+    echo "Running btc in headless mode"
+    IS_HEADLESS=true
+  else
+    debug " Running btc in interactive mode"
+    IS_HEADLESS=false
+  fi
+}
+#-----------
+# check if the -offline parameter is used
+function is_offline() {
+  if [[ "$2" == "-offline" || "$4" ==  "-offline" ]]; then
+    debug " offline is true"
+    IS_OFFLINE=true
+  fi
+}
+#-----------
+# load local settings vars into global space if found
+function load_local_settings() {
+  if [ -f "$SETTINGS_FILE" ]; then
+    debug " loading settings file"
+    source "$SETTINGS_FILE"
+  fi
+}
+#-----------
+# write the ~/.daimensions settings file
+function write_local_settings() {
+  echo "TERMS_ACCEPT=$TERMS_ACCEPT" > "$SETTINGS_FILE"
+  echo "TERMS_ACCEPT_DATE='$TERMS_ACCEPT_DATE'" >> "$SETTINGS_FILE"
+  echo "DOCKERIMAGE=$DOCKERIMAGE" >> "$SETTINGS_FILE"
+  echo "IS_OFFLINE=$IS_OFFLINE" >> "$SETTINGS_FILE"
+}
+#-----------
+# checks T&C t&c accepted
+# and prompt user for terms and conditions acceptance
+# todo add T&C revision checking from server
+function check_terms() {
+  debug " checking terms and conditions"
+  # ignoring terms check if headless
+  if [[ $TERMS_ACCEPT = false && $IS_HEADLESS = false ]]; then
+    echo "$TERMS_PROMPT1a"
+    echo "$TERMS_PROMPT1b"
+    while true; do
+        read -p "$TERMS_PROMPT2" yn
+        case $yn in
+            [Yy]* ) TERMS_ACCEPT=true;TERMS_ACCEPT_DATE=$(date); write_local_settings; break;;
+            [Nn]* ) exit 99;;
+            * ) echo "Please answer yes or no.";;
+        esac
+    done
+  fi
+}
+#-----------
+# Check that docker is installed
+# exit 255 if failure
+function is_docker_installed() {
+  debug " is docker installed?"
+  command -v docker &> /dev/null
+  if [ $? != 0 ]; then
+    echo "docker is not installed on this machine."
+    echo "Please install first and restart this script."
+    exit 255  # FAIL
+  else
+    debug " docker is installed properly"
+  fi
+}
+#-----------
+# checking parameters for -update etc. --> $UPDATE=true
+function check_update() {
+  debug " checking parameters $UPDATE $1 $2"
+  # check for -update parameter
+  if [[ "$1" == "-update" ]]; then
+    debug " triggering update"
+    UPDATE=true
+    # check for -image
+    if [[ "$2" == "-image" && -n $3 ]]; then
+      debug " using image $3"
+      DOCKERIMAGE=$3;
+      write_local_settings;
+    fi;
+  # check for existance of $USERIMAGE -> trigger update
+  elif [[ "$(docker images -q $USERIMAGE 2> /dev/null)" == "" ]]; then
+    UPDATE=true
+	RUN_AFTER_UPDATE=true		# user is expecting to run btc
+  fi
+}
+#-----------
+# check for gpu --> $USE_GPU
+function check_gpu() {
+  # Check for GPU
+  if [ -x /usr/bin/nvidia-smi ] ; then
+    local gpucount=$(/usr/bin/nvidia-smi -L | grep "GPU" | wc -l )
+    if [ $gpucount -gt 0 ] ; then USE_GPU=true ; fi
+    write_local_settings;
+  fi
+}
+#-----------
+# pull btc_local image & check base image exists
+# skip pull if offline
+function pull_btc() {
+  if [ $IS_OFFLINE = false ]; then
+    echo "Updating $DOCKERIMAGE"
+    docker pull $DOCKERIMAGE
+  fi
+  if [[ "$(docker images -q $DOCKERIMAGE 2> /dev/null)" == "" ]]; then
+      echo "Docker image $DOCKERIMAGE was not created properly. Terminating"
+      echo "Please run docker pull $DOCKERIMAGE"
+      exit 254
+  fi
+}
+#-----------
+# create $USERIMAGE from $DOCKERIMAGE
+# copy .daimensions.key from working dir to home dir
+function create_user_docker_image() {
+  debug " creating user docker image"
+  if [[ ! -f $KEY_FILE ]]; then
+    # attempt to keep the key portable
+    extract_dai_key_from_container
+  fi
+  # create dockerfile
+  if [ -f $KEY_FILE ]; then
+    local dockerfile="btc-dockerfile.$$"
+    echo "FROM $DOCKERIMAGE"    >> $dockerfile
+    echo "USER root"            >> $dockerfile
+    groups="0 1 2 3 4 5 6 7 8 9 10 12 13 15 20 21 22 24 25 26 27 29 30 33 34 37 38 39 40 41 42 43 44 45 46 50 60 100 101 65534"
+    if ! [[ $groups =~ (^|[[:space:]])$GID($|[[:space:]]) ]] ; then
+        echo "RUN addgroup --gid $GID $USER" >> $dockerfile
+    fi
+    echo "RUN adduser --disabled-password --gecos '' --uid $UID --gid $GID --home $USER_HOME $USER"  >> $dockerfile
+    echo "USER $USER" >> $dockerfile
+    echo "COPY --chown=$UID:$GID $KEY_FILE $USER_HOME" >> $dockerfile
+    docker build -t $USERIMAGE -f $dockerfile . >> /dev/null
+    rm $dockerfile
+    rm $KEY_FILE
+  else
+    docker tag $DOCKERIMAGE $USERIMAGE
+  fi
+  if [[ "$(docker images -q $USERIMAGE 2> /dev/null)" == "" ]]; then
+    echo "Docker image $USERIMAGE was not created properly. Terminating"
+    exit 253
+  fi
+
+  echo "Docker image $USERIMAGE updated successfully."
+}
+#-----------
+# extract .daimensions.key from container into current directory
+function extract_dai_key_from_container() {
+  # extract key from existing
+  USER_IMG_SHA=$(docker images -q $USERIMAGE 2> /dev/null)
+  if [[ $USER_IMG_SHA != "" ]]; then
+    docker create --name="$USER_CONT_NAME" btc-$USER:latest;
+    docker cp $USER_CONT_NAME:/btc-$USER/.daimensions.key .i 2>/dev/null ;
+    docker rm $USER_CONT_NAME >/dev/null;
+  fi
+}
+
+# update btc
+function update_btc() {
+  debug " running update"
+  pull_btc
+  create_user_docker_image
+}
+
+function run_btc() {
+  debug " executing btc"
+  check_gpu
+  if [[ $USE_GPU = true ]]; then 
+  	docker run --rm --gpus all --user="$UID:$GID" -it --mount type=bind,source="$(pwd)",target=/btc $USERIMAGE "$@"
+  else
+  
+  	docker run --rm --user="$UID:$GID" -it --mount type=bind,source="$(pwd)",target=/btc $USERIMAGE "$@"
+  fi
+  BTC_EXIT=$?
+  if [ -f $KEY_FILE ]; then
+    create_user_docker_image
+  fi
+  exit $BTC_EXIT
+}
+
+main "$@"
+
+# TESTS ============================
+#!	 docker not installed -> exit 255
+#!	 no terms accepted -> exit 99
+#!	 headless and no terms -> ok
+#!	 new install & headless
+#!	 new install
+#	 update install
+#!	 new offline mode
+#!	 update offline mode
+#	 internetless install (req external container & key)
+#	 internetless update
+#	 internetless install w/o container
+#	 internetless install w/o key
+#! update using production/beta/alpha/custom gpu/cpu image
+#	 run btc with/without use_gpu
+#	 docker source image not available -> exit 254
+#  docker user image not available -> force update
+
+# docker run -it --rm --entrypoint /bin/bash btc-andys:latest
