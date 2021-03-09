@@ -8,6 +8,18 @@ import inspect
 import importlib
 import textwrap
 import time
+def clean_labels(arr):
+	#makes the labels 0,...,c-1
+	unique_labels = np.unique((arr[:, -1].reshape(-1)))
+	if (unique_labels == np.array(list(range(len(unique_labels))))).all():
+		return arr
+	mappings = {}
+	for i, label in enumerate(unique_labels):
+		mappings[label] = i
+	for row in arr:
+		row[-1]=mappings[row[-1]]
+
+	return arr
 
 def safe_class_split(arr):
 	np.random.seed(0)
@@ -24,7 +36,7 @@ def safe_class_split(arr):
 
 def run_a_btc(client, trainfile, testarr, flag='DT'):
 	outfile = str(flag.replace('-','').replace(' ','')) + '.py'
-	compiler_cmd = './' + str(client) + ' \'' + str(trainfile) + '\' ' + ('-headerless -f ') + str(flag) + ' -o ' + outfile + ' -riskoverfit --yes'
+	compiler_cmd = './' + str(client) + ' \'' + str(trainfile) + '\' -headerless -f ' + str(flag) + ' -o ' + outfile + ' -riskoverfit --yes'
 	print(compiler_cmd)
 	os.system(compiler_cmd)
 	jsonfile = str(flag.replace('-','').replace(' ','')) + '.json'
@@ -77,7 +89,8 @@ def run(args):
 	parser.add_argument('-ensemble',action="store_true",help="Ensemble any model with better than best guess on heldout data together")
 	args = parser.parse_args(args)
 	since=time.time()
-	fileList = glob.glob('clean*')
+	client_dir = os.path.split(args.BTC_CLIENT)[0]
+	fileList = list(glob.glob(client_dir + 'clean*')) + list(glob.glob('clean*')) 
 	for filePath in fileList:
 		try:
 			os.remove(filePath)
@@ -85,14 +98,15 @@ def run(args):
 			print("Error while deleting file : ", filePath)
 	print("Cleaning...")
 	np.random.seed(0)
-	os.system('./' + args.BTC_CLIENT + ' \'' + str(args.DATAFILE) + '\' -cleanonly --yes ' + (' -headerless' if args.headerless else '') )
-	fileList = glob.glob('clean*')
+	os.system('./' + args.BTC_CLIENT + ' \'' + str(args.DATAFILE) + '\' -cleanonly --yes' + (' -headerless' if args.headerless else '') )
+	fileList = list(glob.glob(client_dir + 'clean*')) + list(glob.glob('clean*'))
 	for filePath in fileList:
 		if '.csv' in filePath:
 			cleanfile = filePath
 	print("Done Cleaning!")
 	print("Splitting Data...")
-	trainarr,valarr = safe_class_split(np.loadtxt(cleanfile,delimiter=',',dtype='float64'))
+	cleanarr = clean_labels(np.loadtxt(cleanfile,delimiter=',',dtype='float64'))
+	trainarr,valarr = safe_class_split(cleanarr)
 	train_file = 'train.csv'
 	np.savetxt(train_file, trainarr, delimiter=',', fmt='%s')
 	val_file = 'val.csv'
@@ -145,7 +159,7 @@ def run(args):
 				print("#"*35)
 
 	print("Total Time Elapsed:",int(time.time()-since),'seconds')
-	fileList = glob.glob('clean*')
+	fileList = list(glob.glob(client_dir + 'clean*')) + list(glob.glob('clean*'))
 	for filePath in fileList:
 		try:
 			os.remove(filePath)

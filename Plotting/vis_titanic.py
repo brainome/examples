@@ -12,41 +12,40 @@
 # Please contact support@brainome.ai with any questions.
 # Use of predictions results at your own risk.
 #
-# Output of Brainome Daimensions(tm) 0.99 Table Compiler v0.99.
-# Invocation: btc -f NN titanic_train.csv -o vis_titanic.py -target Survived -rank -e 5
-# Total compiler execution time: 0:05:02.91. Finished on: Feb-25-2021 05:37:55.
+# Output of Brainome Daimensions(tm) 0.991 Table Compiler v0.99.
+# Invocation: btc -f NN titanic_train.csv -o vis_titanic.py -target Survived -rank -e 5 --yes
+# Total compiler execution time: 0:06:03.30. Finished on: Mar-05-2021 18:29:44.
 # This source code requires Python 3.
 #
 """
-Classifier Type:                     Neural Network
+Classifier Type:                    Neural Network
 System Type:                         Binary classifier
-Training/Validation Split:           70:30%
+Training/Validation Split:           50:50%
 Best-guess accuracy:                 61.61%
-Training accuracy:                   83.30% (519/623 correct)
-Validation accuracy:                 75.74% (203/268 correct)
-Overall Model accuracy:              81.03% (722/891 correct)
-Overall Improvement over best guess: 19.42% (of possible 38.39%)
-Model capacity (MEC):                25 bits
-Generalization ratio:                27.75 bits/bit
-Model efficiency:                    0.77%/parameter
+Training accuracy:                   78.42% (349/445 correct)
+Validation accuracy:                 82.28% (367/446 correct)
+Overall Model accuracy:              80.35% (716/891 correct)
+Overall Improvement over best guess: 18.74% (of possible 38.39%)
+Model capacity (MEC):                1 bits
+Generalization ratio:                335.39 bits/bit
+Model efficiency:                    18.73%/parameter
 System behavior
-True Negatives:                      55.22% (492/891)
-True Positives:                      25.81% (230/891)
-False Negatives:                     12.57% (112/891)
-False Positives:                     6.40% (57/891)
-True Pos. Rate/Sensitivity/Recall:   0.67
-True Neg. Rate/Specificity:          0.90
-Precision:                           0.80
-F-1 Measure:                         0.73
-False Negative Rate/Miss Rate:       0.33
-Critical Success Index:              0.58
+True Negatives:                      57.58% (513/891)
+True Positives:                      22.78% (203/891)
+False Negatives:                     15.60% (139/891)
+False Positives:                     4.04% (36/891)
+True Pos. Rate/Sensitivity/Recall:   0.59
+True Neg. Rate/Specificity:          0.93
+Precision:                           0.85
+F-1 Measure:                         0.70
+False Negative Rate/Miss Rate:       0.41
+Critical Success Index:              0.54
 Confusion Matrix:
- [55.22% 6.40%]
- [12.57% 25.81%]
-Generalization efficiency:           13.66
-Overfitting:                         No
-Using only the important columns: Sex SibSp Parch Pclass 
-Risk of coincidental column correlation: <0.001%
+ [57.58% 4.04%]
+ [15.60% 22.78%]
+Generalization index:                165.13
+Percent of Data Memorized:           0.61%
+{"to_select_idxs":[3, 5, 6, 1], "to_ignore_idxs":[0, 2, 4, 7, 8, 9, 10], "overfit_risk":3.6637359812630166e-14, "risk_progression":[0.30158444918451266, 0.29776154771597657, 0.2952663392155634, 0.2932187224387564], "test_accuracy_progression":[[3, 0.7867564534231201], [5, 0.7968574635241302], [6, 0.8035914702581369], [1, 0.8092031425364759]]}
 
 """
 
@@ -152,8 +151,8 @@ def preprocess(inputcsvfile, outputcsvfile, headerless=False, testfile=False, ta
     if (testfile):
         target = ''
         hc = -1 
-    with open(outputcsvfile, "w+") as outputfile:
-        with open(inputcsvfile) as csvfile:
+    with open(outputcsvfile, "w+", encoding='utf-8') as outputfile:
+        with open(inputcsvfile, "r", encoding='utf-8') as csvfile:      # hardcoded utf-8 encoding per #717
             reader = csv.reader(csvfile)
             if (headerless == False):
                 header=next(reader, None)
@@ -194,7 +193,7 @@ def preprocess(inputcsvfile, outputcsvfile, headerless=False, testfile=False, ta
                 else:
                     print("", file=outputfile)
 
-                for row in csv.DictReader(open(inputcsvfile)):
+                for row in csv.DictReader(open(inputcsvfile, encoding='utf-8')):
                     if target and (row[target] in ignorelabels):
                         continue
                     first = True
@@ -349,9 +348,9 @@ def clean(filename, outfile, rounding=-1, headerless=False, testfile=False, trim
 
     #Main Cleaning Code
     rowcount = 0
-    with open(filename) as csv_file:
+    with open(filename, encoding='utf-8') as csv_file:
         reader = csv.reader(csv_file)
-        f = open(outfile, "w+")
+        f = open(outfile, "w+", encoding='utf-8')
         if (headerless == False):
             next(reader, None)
         outbuf = []
@@ -362,7 +361,7 @@ def clean(filename, outfile, rounding=-1, headerless=False, testfile=False, trim
             if not transform_true:
                 rowlen = num_attr if trim else num_attr + len(ignorecolumns)
             else:
-                rowlen = num_attr_before_transform if trim else num_attr_before_transform + len(ignorecolumns)
+                rowlen = num_attr_before_transform if trim else num_attr_before_transform + len(ignorecolumns)      # noqa
             if (not testfile):
                 rowlen = rowlen + 1    
             if ((len(row) - (1 if ((testfile and len(important_idxs) == 1)) else 0))  != rowlen) and not (row == ['','']):
@@ -403,11 +402,11 @@ def single_classify(row, return_probabilities=False):
 
 
     #Nueron Equations
-    h_0 = max((((-4.474127 * float(x[0]))+ (-16.530014 * float(x[1]))+ (0.3632827 * float(x[2]))+ (0.32136515 * float(x[3]))) + 12.100474), 0)
-    h_1 = max((((0.65849805 * float(x[0]))+ (2.2165382 * float(x[1]))+ (-0.6220546 * float(x[2]))+ (-4.196301 * float(x[3]))) + -0.8042341), 0)
-    h_2 = max((((-1.2425824 * float(x[0]))+ (-0.665531 * float(x[1]))+ (-1.277177 * float(x[2]))+ (-0.11120979 * float(x[3]))) + -0.6508854), 0)
-    h_3 = max((((0.19137733 * float(x[0]))+ (2.001466 * float(x[1]))+ (0.7650189 * float(x[2]))+ (0.7440585 * float(x[3]))) + -0.6627988), 0)
-    o[0] = (0.48395234 * h_0)+ (-0.7045365 * h_1)+ (0.74831176 * h_2)+ (-0.6090292 * h_3) + 1.3535782
+    h_0 = max((((-1.0331564 * float(x[0]))+ (-13.883508 * float(x[1]))+ (-0.3659304 * float(x[2]))+ (-0.8858443 * float(x[3]))) + 10.840315), 0)
+    h_1 = max((((-1.21943 * float(x[0]))+ (9.142752 * float(x[1]))+ (1.5273632 * float(x[2]))+ (1.0293974 * float(x[3]))) + 3.6419077), 0)
+    h_2 = max((((4.261173 * float(x[0]))+ (-0.68028814 * float(x[1]))+ (1.2012279 * float(x[2]))+ (-0.80428684 * float(x[3]))) + 0.12339349), 0)
+    h_3 = max((((-1.4146137 * float(x[0]))+ (0.6000228 * float(x[1]))+ (-1.5829155 * float(x[2]))+ (-0.43546283 * float(x[3]))) + -0.8679309), 0)
+    o[0] = (0.5142594 * h_0)+ (0.1439158 * h_1)+ (-0.19555545 * h_2)+ (-0.16118336 * h_3) + -1.3648369
 
 
 
@@ -415,7 +414,7 @@ def single_classify(row, return_probabilities=False):
     if num_output_logits==1:
         if return_probabilities:
             exp_o = 1./(1. + np.exp(-o[0]))
-            return np.array([exp_o, 1.-exp_o])
+            return np.array([1.-exp_o, exp_o])
         else:
             return o[0]>=0
     else:
@@ -430,13 +429,12 @@ def single_classify(row, return_probabilities=False):
 def classify(arr, transform_true=False, return_probabilities=False):
     #apply transformation if necessary
     if transform_true:
-        trans = transform(arr[:, :-1])
-        arr = np.concatenate((trans, cleanarr[:, -1].reshape(-1, 1)), axis = 1)
+        arr = transform(arr)
     #init
-    w_h = np.array([[-4.474126815795898, -16.530014038085938, 0.363282710313797, 0.3213651478290558], [0.6584980487823486, 2.216538190841675, -0.6220545768737793, -4.196300983428955], [-1.2425824403762817, -0.6655309796333313, -1.2771769762039185, -0.11120978742837906], [0.19137732684612274, 2.0014660358428955, 0.765018880367279, 0.7440584897994995]])
-    b_h = np.array([12.10047435760498, -0.8042340874671936, -0.6508854031562805, -0.6627988219261169])
-    w_o = np.array([[0.4839523434638977, -0.704536497592926, 0.7483117580413818, -0.6090291738510132]])
-    b_o = np.array(1.3535782098770142)
+    w_h = np.array([[-1.033156394958496, -13.88350772857666, -0.3659304082393646, -0.8858442902565002], [-1.2194299697875977, 9.142751693725586, 1.5273631811141968, 1.0293973684310913], [4.261172771453857, -0.6802881360054016, 1.2012279033660889, -0.8042868375778198], [-1.4146137237548828, 0.6000227928161621, -1.5829155445098877, -0.4354628324508667]])
+    b_h = np.array([10.840314865112305, 3.6419076919555664, 0.12339349091053009, -0.8679308891296387])
+    w_o = np.array([[0.514259397983551, 0.1439158022403717, -0.1955554485321045, -0.16118335723876953]])
+    b_o = np.array(-1.3648369312286377)
 
     #Hidden Layer
     h = np.dot(arr, w_h.T) + b_h
@@ -446,18 +444,16 @@ def classify(arr, transform_true=False, return_probabilities=False):
 
     #Output
     out = np.dot(relu, w_o.T) + b_o
-    if return_probabilities:
-        return np.array(np.exp(out)) / np.sum(np.exp(out), axis=1).reshape(-1,1)
     if num_output_logits == 1:
         if return_probabilities:
             exp_o = 1./(1. + np.exp(-out))
-            return np.concatenate((exp_o, 1.-exp_o), axis=1)
+            return np.concatenate((1.-exp_o, exp_o), axis=1)
         else:
             return (out >= 0).astype('int').reshape(-1)
     else:
         if return_probabilities:
             exps = np.exp(out)
-            Z = sum(exps, axis=1).reshape(-1, 1)
+            Z = np.sum(exps, axis=1).reshape(-1, 1)
             return exps/Z
         else:
             return (np.argmax(out, axis=1)).reshape(-1)
@@ -465,7 +461,7 @@ def classify(arr, transform_true=False, return_probabilities=False):
 
 
 def Predict(arr,headerless,csvfile, get_key, classmapping):
-    with open(csvfile, 'r') as csvinput:
+    with open(csvfile, 'r', encoding='utf-8') as csvinput:
         #readers and writers
         reader = csv.reader(csvinput)
 
@@ -587,7 +583,7 @@ if __name__ == "__main__":
 
 
         #Report Metrics
-        model_cap = 25
+        model_cap = 1
         if args.json:
             import json
         if n_classes == 2:
@@ -646,6 +642,8 @@ if __name__ == "__main__":
             else:
                 if classifier_type == 'NN':
                     print("Classifier Type:                    Neural Network")
+                elif classifier_type == 'RF':
+                    print("Classifier Type:                    Random Forest")
                 else:
                     print("Classifier Type:                    Decision Tree")
                 print("System Type:                        Binary classifier")
@@ -698,6 +696,8 @@ if __name__ == "__main__":
             else:
                 if classifier_type == 'NN':
                     print("Classifier Type:                    Neural Network")
+                elif classifier_type == 'RF':
+                    print("Classifier Type:                    Random Forest")
                 else:
                     print("Classifier Type:                    Decision Tree")
                 print("System Type:                        " + str(n_classes) + "-way classifier")
@@ -714,13 +714,35 @@ if __name__ == "__main__":
         except:
             print("Note: If you install numpy (https://www.numpy.org) and scipy (https://www.scipy.org) this predictor generates a confusion matrix")
 
-        def confusion_matrix(y_true, y_pred, labels=None, sample_weight=None, normalize=None):
+        def confusion_matrix(y_true, y_pred, json, labels=None, sample_weight=None, normalize=None):
+            stats = {}
+            if labels is None:
+                labels = np.array(list(set(list(y_true.astype('int')))))
+            else:
+                labels = np.asarray(labels)
+                if np.all([l not in y_true for l in labels]):
+                    raise ValueError("At least one label specified must be in y_true")
+            n_labels = labels.size
+
+            for class_i in range(n_labels):
+                stats[class_i] = {'TP':{},'FP':{},'FN':{},'TN':{}}
+                class_i_indices = np.argwhere(y_true==class_i)
+                not_class_i_indices = np.argwhere(y_true!=class_i)
+                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices]==y_true[class_i_indices]))
+                stats[int(class_i)]['FP'] = int(np.sum(y_pred[class_i_indices]!=y_true[class_i_indices]))
+                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices]==y_true[not_class_i_indices]))
+                stats[int(class_i)]['FN'] = int(np.sum(y_pred[not_class_i_indices]!=y_true[not_class_i_indices]))
             #check for numpy/scipy is imported
             try:
                 from scipy.sparse import coo_matrix #required for multiclass metrics
             except:
-                print("Note: If you install scipy (https://www.scipy.org) this predictor generates a confusion matrix")
-                sys.exit()
+                if not json:
+                    print("Note: If you install scipy (https://www.scipy.org) this predictor generates a confusion matrix")
+                    sys.exit()
+                else:
+                    return np.array([]), stats
+                
+
             # Compute confusion matrix to evaluate the accuracy of a classification.
             # By definition a confusion matrix :math:C is such that :math:C_{i, j}
             # is equal to the number of observations known to be in group :math:i and
@@ -752,12 +774,7 @@ if __name__ == "__main__":
             # Confusion matrix.
             # References
             # ----------
-            if labels is None:
-                labels = np.array(list(set(list(y_true.astype('int')))))
-            else:
-                labels = np.asarray(labels)
-                if np.all([l not in y_true for l in labels]):
-                    raise ValueError("At least one label specified must be in y_true")
+
 
 
             if sample_weight is None:
@@ -771,7 +788,6 @@ if __name__ == "__main__":
                 raise ValueError("normalize must be one of {'true', 'pred', 'all', None}")
 
 
-            n_labels = labels.size
             label_to_ind = {y: x for x, y in enumerate(labels)}
             # convert yt, yp into index
             y_pred = np.array([label_to_ind.get(x, n_labels + 1) for x in y_pred])
@@ -780,6 +796,7 @@ if __name__ == "__main__":
             ind = np.logical_and(y_pred < n_labels, y_true < n_labels)
             y_pred = y_pred[ind]
             y_true = y_true[ind]
+
             # also eliminate weights of eliminated items
             sample_weight = sample_weight[ind]
             # Choose the accumulator dtype to always have high precision
@@ -798,10 +815,11 @@ if __name__ == "__main__":
                 elif normalize == 'all':
                     cm = cm / cm.sum()
                 cm = np.nan_to_num(cm)
-            return cm
-        mtrx = confusion_matrix(np.array(true_labels).reshape(-1), np.array(preds).reshape(-1))
+            return cm, stats
+        mtrx, stats = confusion_matrix(np.array(true_labels).reshape(-1), np.array(preds).reshape(-1), args.json)
         if args.json:
             json_dict['confusion_matrix'] = mtrx.tolist()
+            json_dict['multiclass_stats'] = stats
             print(json.dumps(json_dict))
         else:
             mtrx = mtrx / np.sum(mtrx) * 100.0
