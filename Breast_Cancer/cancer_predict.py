@@ -12,19 +12,22 @@
 # Please contact support@brainome.ai with any questions.
 # Use of predictions results at your own risk.
 #
-# Output of Brainome Daimensions(tm) 0.99 Table Compiler v0.99.
-# Invocation: btc -v -v -f DT cancer_train.csv -o cancer_predict.py -e 10 -rank
-# Total compiler execution time: 0:00:13.21. Finished on: Feb-24-2021 20:44:59.
+# Output of Brainome Daimensions(tm) 0.991 Table Compiler v0.99.
+# Invocation: btc -v -v -f DT cancer_train.csv -o cancer_predict.py -e 10 -rank --yes
+# Total compiler execution time: 0:00:29.33. Finished on: Mar-05-2021 17:40:03.
 # This source code requires Python 3.
 #
 """
-Classifier Type:                     Decision Tree
+Classifier Type:                    Decision Tree
 System Type:                         Binary classifier
+Training/Validation Split:           60:40%
 Best-guess accuracy:                 63.14%
+Training accuracy:                   97.01% (325/335 correct)
+Validation accuracy:                 97.76% (219/224 correct)
 Overall Model accuracy:              97.31% (544/559 correct)
 Overall Improvement over best guess: 34.17% (of possible 36.86%)
 Model capacity (MEC):                5 bits
-Generalization ratio:                103.31 bits/bit
+Generalization ratio:                62.09 bits/bit
 Model efficiency:                    6.83%/parameter
 System behavior
 True Negatives:                      61.00% (341/559)
@@ -40,12 +43,10 @@ Critical Success Index:              0.93
 Confusion Matrix:
  [61.00% 2.15%]
  [0.54% 36.31%]
-Generalization efficiency:           50.64
-Overfitting:                         No
-Note: Unable to split dataset. The predictor was trained and evaluated on the same data.
+Generalization index:                30.44
+Percent of Data Memorized:           3.29%
 Note: Labels have been remapped to '2'=0, '4'=1.
-Using only the important columns: Uniformity_of_Cell_Shape Bare_Nuclei Clump_Thickness Normal_Nucleoli Uniformity_of_Cell_Size 
-Risk of coincidental column correlation: <0.001%
+{"to_select_idxs":[2, 5, 0, 7, 1], "to_ignore_idxs":[3, 4, 6, 8], "overfit_risk":1.3988810110276972e-14, "risk_progression":[0.4196446912215683, 2.0193428750511555, 1.1980933935247748, 1.9784353766615375, 1.9747985469250273], "test_accuracy_progression":[[2, 0.9159212880143113], [5, 0.9516994633273703], [0, 0.962432915921288], [7, 0.9713774597495528], [1, 0.9731663685152058]]}
 
 """
 
@@ -106,8 +107,8 @@ def preprocess(inputcsvfile, outputcsvfile, headerless=False, testfile=False, ta
     if (testfile):
         target = ''
         hc = -1 
-    with open(outputcsvfile, "w+") as outputfile:
-        with open(inputcsvfile) as csvfile:
+    with open(outputcsvfile, "w+", encoding='utf-8') as outputfile:
+        with open(inputcsvfile, "r", encoding='utf-8') as csvfile:      # hardcoded utf-8 encoding per #717
             reader = csv.reader(csvfile)
             if (headerless == False):
                 header=next(reader, None)
@@ -148,7 +149,7 @@ def preprocess(inputcsvfile, outputcsvfile, headerless=False, testfile=False, ta
                 else:
                     print("", file=outputfile)
 
-                for row in csv.DictReader(open(inputcsvfile)):
+                for row in csv.DictReader(open(inputcsvfile, encoding='utf-8')):
                     if target and (row[target] in ignorelabels):
                         continue
                     first = True
@@ -303,9 +304,9 @@ def clean(filename, outfile, rounding=-1, headerless=False, testfile=False, trim
 
     #Main Cleaning Code
     rowcount = 0
-    with open(filename) as csv_file:
+    with open(filename, encoding='utf-8') as csv_file:
         reader = csv.reader(csv_file)
-        f = open(outfile, "w+")
+        f = open(outfile, "w+", encoding='utf-8')
         if (headerless == False):
             next(reader, None)
         outbuf = []
@@ -316,7 +317,7 @@ def clean(filename, outfile, rounding=-1, headerless=False, testfile=False, trim
             if not transform_true:
                 rowlen = num_attr if trim else num_attr + len(ignorecolumns)
             else:
-                rowlen = num_attr_before_transform if trim else num_attr_before_transform + len(ignorecolumns)
+                rowlen = num_attr_before_transform if trim else num_attr_before_transform + len(ignorecolumns)      # noqa
             if (not testfile):
                 rowlen = rowlen + 1    
             if ((len(row) - (1 if ((testfile and len(important_idxs) == 1)) else 0))  != rowlen) and not (row == ['','']):
@@ -349,7 +350,7 @@ def clean(filename, outfile, rounding=-1, headerless=False, testfile=False, trim
 # Imports -- external
 import numpy as np # For numpy see: http://numpy.org
 from numpy import array
-energy_thresholds = array([16.5, 842162547.0, 1684325057.5, 1684325062.0, 1684325070.0])
+energy_thresholds = array([16.5, 842162547.0, 1684325057.5, 1684325062.0, 1684325069.0])
 def eqenergy(rows):
     try:
         return np.sum(rows, axis=1, dtype=np.float128)
@@ -423,7 +424,7 @@ def Predict(file, get_key, headerless, preprocessedfile, classmapping, trim=Fals
     cleanarr = cleanarr.reshape(cleanarr.shape[0], -1)
     if not trim and ignorecolumns != []:
         cleanarr = cleanarr[:, important_idxs]
-    with open(preprocessedfile, 'r') as csvinput:
+    with open(preprocessedfile, 'r', encoding='utf-8') as csvinput:
         dirtyreader = csv.reader(csvinput)
         if not headerless:
             header = next(dirtyreader, None)
@@ -544,6 +545,8 @@ if __name__ == "__main__":
             else:
                 if classifier_type == 'NN':
                     print("Classifier Type:                    Neural Network")
+                elif classifier_type == 'RF':
+                    print("Classifier Type:                    Random Forest")
                 else:
                     print("Classifier Type:                    Decision Tree")
                 print("System Type:                        Binary classifier")
@@ -596,6 +599,8 @@ if __name__ == "__main__":
             else:
                 if classifier_type == 'NN':
                     print("Classifier Type:                    Neural Network")
+                elif classifier_type == 'RF':
+                    print("Classifier Type:                    Random Forest")
                 else:
                     print("Classifier Type:                    Decision Tree")
                 print("System Type:                        " + str(n_classes) + "-way classifier")
@@ -612,13 +617,35 @@ if __name__ == "__main__":
         except:
             print("Note: If you install numpy (https://www.numpy.org) and scipy (https://www.scipy.org) this predictor generates a confusion matrix")
 
-        def confusion_matrix(y_true, y_pred, labels=None, sample_weight=None, normalize=None):
+        def confusion_matrix(y_true, y_pred, json, labels=None, sample_weight=None, normalize=None):
+            stats = {}
+            if labels is None:
+                labels = np.array(list(set(list(y_true.astype('int')))))
+            else:
+                labels = np.asarray(labels)
+                if np.all([l not in y_true for l in labels]):
+                    raise ValueError("At least one label specified must be in y_true")
+            n_labels = labels.size
+
+            for class_i in range(n_labels):
+                stats[class_i] = {'TP':{},'FP':{},'FN':{},'TN':{}}
+                class_i_indices = np.argwhere(y_true==class_i)
+                not_class_i_indices = np.argwhere(y_true!=class_i)
+                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices]==y_true[class_i_indices]))
+                stats[int(class_i)]['FP'] = int(np.sum(y_pred[class_i_indices]!=y_true[class_i_indices]))
+                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices]==y_true[not_class_i_indices]))
+                stats[int(class_i)]['FN'] = int(np.sum(y_pred[not_class_i_indices]!=y_true[not_class_i_indices]))
             #check for numpy/scipy is imported
             try:
                 from scipy.sparse import coo_matrix #required for multiclass metrics
             except:
-                print("Note: If you install scipy (https://www.scipy.org) this predictor generates a confusion matrix")
-                sys.exit()
+                if not json:
+                    print("Note: If you install scipy (https://www.scipy.org) this predictor generates a confusion matrix")
+                    sys.exit()
+                else:
+                    return np.array([]), stats
+                
+
             # Compute confusion matrix to evaluate the accuracy of a classification.
             # By definition a confusion matrix :math:C is such that :math:C_{i, j}
             # is equal to the number of observations known to be in group :math:i and
@@ -650,12 +677,7 @@ if __name__ == "__main__":
             # Confusion matrix.
             # References
             # ----------
-            if labels is None:
-                labels = np.array(list(set(list(y_true.astype('int')))))
-            else:
-                labels = np.asarray(labels)
-                if np.all([l not in y_true for l in labels]):
-                    raise ValueError("At least one label specified must be in y_true")
+
 
 
             if sample_weight is None:
@@ -669,7 +691,6 @@ if __name__ == "__main__":
                 raise ValueError("normalize must be one of {'true', 'pred', 'all', None}")
 
 
-            n_labels = labels.size
             label_to_ind = {y: x for x, y in enumerate(labels)}
             # convert yt, yp into index
             y_pred = np.array([label_to_ind.get(x, n_labels + 1) for x in y_pred])
@@ -678,6 +699,7 @@ if __name__ == "__main__":
             ind = np.logical_and(y_pred < n_labels, y_true < n_labels)
             y_pred = y_pred[ind]
             y_true = y_true[ind]
+
             # also eliminate weights of eliminated items
             sample_weight = sample_weight[ind]
             # Choose the accumulator dtype to always have high precision
@@ -696,10 +718,11 @@ if __name__ == "__main__":
                 elif normalize == 'all':
                     cm = cm / cm.sum()
                 cm = np.nan_to_num(cm)
-            return cm
-        mtrx = confusion_matrix(np.array(true_labels).reshape(-1), np.array(preds).reshape(-1))
+            return cm, stats
+        mtrx, stats = confusion_matrix(np.array(true_labels).reshape(-1), np.array(preds).reshape(-1), args.json)
         if args.json:
             json_dict['confusion_matrix'] = mtrx.tolist()
+            json_dict['multiclass_stats'] = stats
             print(json.dumps(json_dict))
         else:
             mtrx = mtrx / np.sum(mtrx) * 100.0
