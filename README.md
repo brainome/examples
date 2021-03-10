@@ -18,11 +18,15 @@ MNIST -- The dataset is a well-known set of handwritten digits from OpenML. This
 
 Plotting -- This folder has examples of how to make png visualizations of various dataset predictions in the hidden space.
 
+Spotify -- Extract out features from spotify data automaticaly to indicate a person's personal music preferences with high accuracy.
+
 Advanced Example:
 Speech/Non-Speech/Music Detector -- An example of a speech/non-speech/music detector for random audio files.
 
 Activity Levels -- How to use tryall.py to try -f NN, -f DT, -f RF, -f RF -rank, -f DT -rank, -f NN -rank
 
 Credit Card Fraud -- Learn how to use -O and -balance for highly imbalanced data
+
+How To Use Soft Probs -- Learn How to use the softprobabilities of our classify function in our compiled python predictors
 
 More to come...
