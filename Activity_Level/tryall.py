@@ -53,8 +53,8 @@ def run_a_btc(client, trainfile, testarr, flag='DT'):
 	try:
 		transform_or_not = current_lib.transform_true
 		Normalize = current_lib.Normalize
-		testarr = Normalize(testarr)
-		preds = np.array(current_pred(testarr[:,important_idxs],transform_true=transform_or_not))
+		testarr = Normalize(testarr[:,important_idxs])
+		preds = np.array(current_pred(testarr,transform_true=transform_or_not))
 
 	except:
 		preds = np.array(current_pred(testarr[:,important_idxs]))
