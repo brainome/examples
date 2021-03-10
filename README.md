@@ -21,4 +21,8 @@ Plotting -- This folder has examples of how to make png visualizations of variou
 Advanced Example:
 Speech/Non-Speech/Music Detector -- An example of a speech/non-speech/music detector for random audio files.
 
+Activity Levels -- How to use tryall.py to try -f NN, -f DT, -f RF, -f RF -rank, -f DT -rank, -f NN -rank
+
+Credit Card Fraud -- Learn how to use -O and -balance for highly imbalanced data
+
 More to come...
