@@ -1,7 +1,0 @@
-# State from cleaning and preprocessing
-num_attr=561
-n_classes=6
-clean.mapping={'5': 0, '4': 1, '6': 2, '1': 3, '3': 4, '2': 5}
-target=""
-ignorelabels=[]
-ignorecolumns=[]

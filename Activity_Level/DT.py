@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
-# This code has been produced by a free evaluation version of Daimensions(tm).
-# Portions of this code copyright (c) 2019, 2020 by Brainome, Inc. All Rights Reserved.
+# This code has been produced by a free evaluation version of Brainome Table Compiler(tm).
+# Portions of this code copyright (c) 2019-2021 by Brainome, Inc. All Rights Reserved.
 # Brainome grants an exclusive (subject to our continuing rights to use and modify models),
 # worldwide, non-sublicensable, and non-transferable limited license to use and modify this
 # predictor produced through the input of your data:
@@ -12,9 +12,9 @@
 # Please contact support@brainome.ai with any questions.
 # Use of predictions results at your own risk.
 #
-# Output of Brainome Daimensions(tm) 0.991 Table Compiler v0.99.
+# Output of Brainome Table Compiler v0.991.
 # Invocation: btc train.csv -headerless -f DT -o DT.py -riskoverfit --yes
-# Total compiler execution time: 0:02:11.82. Finished on: Mar-05-2021 01:46:19.
+# Total compiler execution time: 0:01:42.78. Finished on: Mar-17-2021 05:53:46.
 # This source code requires Python 3.
 #
 """
@@ -33,7 +33,7 @@ Confusion Matrix:
  [0.00% 0.00% 0.00% 17.25% 0.00% 0.00%]
  [0.00% 0.00% 0.00% 0.00% 18.51% 0.00%]
  [0.00% 0.00% 0.00% 0.00% 0.00% 18.88%]
-Generalization index:                1.34
+Avg. noise resilience per instance:  -0.21dB
 Percent of Data Memorized:           74.72%
 Note: Unable to split dataset. The predictor was trained and evaluated on the same data.
 """
@@ -529,6 +529,8 @@ if __name__ == "__main__":
                          'model_efficiency':                    int(100 * (modelacc - randguess) / model_cap) / 100.0,
                         'shannon_entropy_of_labels':           H,
                         'classbalance':                        classbalance}
+            if classifier_type == 'NN':
+                json_dict['capacity_utilized_by_nn'] = cap_utilized # noqa
             if args.json:
                 pass
             else:
@@ -543,6 +545,8 @@ if __name__ == "__main__":
                 print("Model accuracy:                     {:.2f}%".format(modelacc) + " (" + str(int(num_correct)) + "/" + str(count) + " correct)")
                 print("Improvement over best guess:        {:.2f}%".format(modelacc - randguess) + " (of possible " + str(round(100 - randguess, 2)) + "%)")
                 print("Model capacity (MEC):               {:.0f} bits".format(model_cap))
+                if classifier_type == 'NN':
+                    print("Model Capacity Utilized:            {:.0f} bits".format(cap_utilized)) # noqa
                 print("Generalization ratio:               {:.2f}".format(int(float(num_correct * 100) / model_cap) / 100.0 * H) + " bits/bit")
                 print("Model efficiency:                   {:.2f}%/parameter".format(int(100 * (modelacc - randguess) / model_cap) / 100.0))
                 print("System behavior")
@@ -585,6 +589,8 @@ if __name__ == "__main__":
                             'model_efficiency':                    int(100 * (modelacc - randguess) / model_cap) / 100.0,
                         'shannon_entropy_of_labels':           H,
                         'classbalance':                        classbalance}
+                if classifier_type == 'NN':
+                    json_dict['capacity_utilized_by_nn'] = cap_utilized # noqa
             else:
                 if classifier_type == 'NN':
                     print("Classifier Type:                    Neural Network")
@@ -597,6 +603,8 @@ if __name__ == "__main__":
                 print("Model accuracy:                     {:.2f}%".format(modelacc) + " (" + str(int(num_correct)) + "/" + str(count) + " correct)")
                 print("Improvement over best guess:        {:.2f}%".format(modelacc - randguess) + " (of possible " + str(round(100 - randguess, 2)) + "%)")
                 print("Model capacity (MEC):               {:.0f} bits".format(model_cap))
+                if classifier_type == 'NN':
+                    print("Model Capacity Utilized:            {:.0f} bits".format(cap_utilized)) # noqa              
                 print("Generalization ratio:               {:.2f}".format(int(float(num_correct * 100) / model_cap) / 100.0 * H) + " bits/bit")
                 print("Model efficiency:                   {:.2f}%/parameter".format(int(100 * (modelacc - randguess) / model_cap) / 100.0))
 
@@ -618,12 +626,12 @@ if __name__ == "__main__":
 
             for class_i in range(n_labels):
                 stats[class_i] = {'TP':{},'FP':{},'FN':{},'TN':{}}
-                class_i_indices = np.argwhere(y_true==class_i)
-                not_class_i_indices = np.argwhere(y_true!=class_i)
-                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices]==y_true[class_i_indices]))
-                stats[int(class_i)]['FP'] = int(np.sum(y_pred[class_i_indices]!=y_true[class_i_indices]))
-                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices]==y_true[not_class_i_indices]))
-                stats[int(class_i)]['FN'] = int(np.sum(y_pred[not_class_i_indices]!=y_true[not_class_i_indices]))
+                class_i_indices = np.argwhere(y_true==class_i) #indices with bus(call class_i=bus in this example)
+                not_class_i_indices = np.argwhere(y_true!=class_i) #indices with not bus
+                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices] == class_i)) #indices where bus, and we predict == bus
+                stats[int(class_i)]['FN'] = int(np.sum(y_pred[class_i_indices] != class_i)) #indices where bus, and we predict != bus
+                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices] != class_i)) #indices with not bus, where we predict != bus
+                stats[int(class_i)]['FP'] = int(np.sum(y_pred[not_class_i_indices] == class_i)) #indices where not bus, we predict as bus
             #check for numpy/scipy is imported
             try:
                 from scipy.sparse import coo_matrix #required for multiclass metrics
