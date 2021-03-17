@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
-# This code has been produced by a free evaluation version of Daimensions(tm).
-# Portions of this code copyright (c) 2019, 2020 by Brainome, Inc. All Rights Reserved.
+# This code has been produced by a free evaluation version of Brainome Table Compiler(tm).
+# Portions of this code copyright (c) 2019-2021 by Brainome, Inc. All Rights Reserved.
 # Brainome grants an exclusive (subject to our continuing rights to use and modify models),
 # worldwide, non-sublicensable, and non-transferable limited license to use and modify this
 # predictor produced through the input of your data:
@@ -12,9 +12,9 @@
 # Please contact support@brainome.ai with any questions.
 # Use of predictions results at your own risk.
 #
-# Output of Brainome Daimensions(tm) 0.991 Table Compiler v0.99.
+# Output of Brainome Table Compiler v0.991.
 # Invocation: btc train.csv -headerless -f NN -o NN.py -riskoverfit --yes
-# Total compiler execution time: 0:09:28.89. Finished on: Mar-05-2021 01:44:01.
+# Total compiler execution time: 0:13:58.97. Finished on: Mar-17-2021 05:51:54.
 # This source code requires Python 3.
 #
 """
@@ -23,9 +23,9 @@ System Type:                         6-way classifier
 Best-guess accuracy:                 18.88%
 Overall Model accuracy:              99.96% (5147/5149 correct)
 Overall Improvement over best guess: 81.08% (of possible 81.12%)
-Model capacity (MEC):                1 bits
-Generalization ratio:                13258.30 bits/bit
-Model efficiency:                    81.08%/parameter
+Model capacity (MEC):                3414 bits
+Generalization ratio:                3.86 bits/bit
+Model efficiency:                    0.02%/parameter
 Confusion Matrix:
  [16.72% 0.00% 0.00% 0.00% 0.00% 0.00%]
  [0.00% 14.99% 0.00% 0.00% 0.00% 0.00%]
@@ -33,8 +33,8 @@ Confusion Matrix:
  [0.00% 0.00% 0.00% 17.23% 0.02% 0.00%]
  [0.00% 0.00% 0.00% 0.02% 18.49% 0.00%]
  [0.00% 0.00% 0.00% 0.00% 0.00% 18.88%]
-Generalization index:                4278.62
-Percent of Data Memorized:           0.02%
+Avg. noise resilience per instance:  -0.18dB
+Percent of Data Memorized:           80.20%
 Note: Unable to split dataset. The predictor was trained and evaluated on the same data.
 """
 
@@ -335,6 +335,7 @@ def argmax(l):
     f = lambda i: l[i]
     return max(range(len(l)), key=f)
 # Classifier
+
 def single_classify(row, return_probabilities=False):
     x = row
     o = [0] * num_output_logits
@@ -353,13 +354,17 @@ def single_classify(row, return_probabilities=False):
 
     if num_output_logits == 1:
         if return_probabilities:
-            exp_o = 1./(1. + math.exp(-o[0]))
+            if o[0] < 0:
+                exp_o = 1. - 1./(1. + math.exp(o[0]))
+            else:
+                exp_o = 1./(1. + math.exp(-o[0]))
             return [1.-exp_o, exp_o]
         else:
             return o[0] >= 0
     else:
         if return_probabilities:
-            exps = [math.exp(x) for x in o]
+            max_val = max(o)
+            exps = [math.exp(x - max_val) for x in o]
             Z = sum(exps)
             return [x/Z for x in exps]
         else:
@@ -374,63 +379,30 @@ def classify(arr, return_probabilities=False):
     return outputs
 
 def Validate(cleanvalfile):
-    #Binary
-    if n_classes == 2:
-        with open(cleanvalfile, 'r', encoding='utf-8') as valcsvfile:
-            count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0 = 0, 0, 0, 0, 0, 0, 0, 0
-            valcsvreader = csv.reader(valcsvfile)
-            preds = []
-            y_trues = []
-            for valrow in valcsvreader:
-                if len(valrow) == 0:
-                    continue
-                y_true = int(float(valrow[-1]))
-                pred = int(single_classify(valrow[:-1]))
-                y_trues.append(y_true)
-                preds.append(pred)
-                if pred == y_true:
-                    correct_count += 1
-                    if int(float(valrow[-1])) == 1:
-                        num_class_1 += 1
-                        num_TP += 1
-                    else:
-                        num_class_0 += 1
-                        num_TN += 1
-                else:
-                    if int(float(valrow[-1])) == 1:
-                        num_class_1 += 1
-                        num_FN += 1
-                    else:
-                        num_class_0 += 1
-                        num_FP += 1
-                count += 1
-        return count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0, preds, y_trues
+    with open(cleanvalfile, 'r') as valcsvfile: 
+        count, correct_count = 0, 0 
+        valcsvreader = csv.reader(valcsvfile) 
+        numeachclass = {} 
+        preds = [] 
+        y_trues = [] 
+        for i, valrow in enumerate(valcsvreader): 
+            pred = int(single_classify(valrow[:-1])) 
+            preds.append(pred) 
+            y_true = int(float(valrow[-1])) 
+            y_trues.append(y_true) 
+            if len(valrow) == 0: 
+                continue 
+            if pred == y_true: 
+                correct_count += 1 
+            #if class seen, add to its counter 
+            if y_true in numeachclass.keys(): 
+                numeachclass[y_true] += 1 
+            #initialize a new counter 
+            else: 
+                numeachclass[y_true] = 1 
+            count += 1 
+    return count, correct_count, numeachclass, preds,  y_trues 
 
-    #Multiclass
-    else:
-        with open(cleanvalfile, 'r', encoding='utf-8') as valcsvfile:
-            count, correct_count = 0, 0
-            valcsvreader = csv.reader(valcsvfile)
-            numeachclass = {}
-            preds = []
-            y_trues = []
-            for i, valrow in enumerate(valcsvreader):
-                pred = int(single_classify(valrow[:-1]))
-                preds.append(pred)
-                y_true = int(float(valrow[-1]))
-                y_trues.append(y_true)
-                if len(valrow) == 0:
-                    continue
-                if pred == y_true:
-                    correct_count += 1
-                #if class seen, add to its counter
-                if y_true in numeachclass.keys():
-                    numeachclass[y_true] += 1
-                #initialize a new counter
-                else:
-                    numeachclass[y_true] = 1
-                count += 1
-        return count, correct_count, numeachclass, preds,  y_trues
 
 
 
@@ -487,13 +459,11 @@ if __name__ == "__main__":
     #Validate
     else: 
         classifier_type = 'NN'
-        if n_classes == 2:
-            count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0, preds, true_labels = Validate(cleanfile)
-        else:
-            count, correct_count, numeachclass, preds, true_labels = Validate(cleanfile)
+        count, correct_count, numeachclass, preds, true_labels = Validate(cleanfile)
 
         #Report Metrics
-        model_cap = 1
+        model_cap = 3414
+        cap_utilized = 3414
         if args.json:
             import json
         if n_classes == 2:
@@ -547,6 +517,8 @@ if __name__ == "__main__":
                          'model_efficiency':                    int(100 * (modelacc - randguess) / model_cap) / 100.0,
                         'shannon_entropy_of_labels':           H,
                         'classbalance':                        classbalance}
+            if classifier_type == 'NN':
+                json_dict['capacity_utilized_by_nn'] = cap_utilized # noqa
             if args.json:
                 pass
             else:
@@ -561,6 +533,8 @@ if __name__ == "__main__":
                 print("Model accuracy:                     {:.2f}%".format(modelacc) + " (" + str(int(num_correct)) + "/" + str(count) + " correct)")
                 print("Improvement over best guess:        {:.2f}%".format(modelacc - randguess) + " (of possible " + str(round(100 - randguess, 2)) + "%)")
                 print("Model capacity (MEC):               {:.0f} bits".format(model_cap))
+                if classifier_type == 'NN':
+                    print("Model Capacity Utilized:            {:.0f} bits".format(cap_utilized)) # noqa
                 print("Generalization ratio:               {:.2f}".format(int(float(num_correct * 100) / model_cap) / 100.0 * H) + " bits/bit")
                 print("Model efficiency:                   {:.2f}%/parameter".format(int(100 * (modelacc - randguess) / model_cap) / 100.0))
                 print("System behavior")
@@ -603,6 +577,8 @@ if __name__ == "__main__":
                             'model_efficiency':                    int(100 * (modelacc - randguess) / model_cap) / 100.0,
                         'shannon_entropy_of_labels':           H,
                         'classbalance':                        classbalance}
+                if classifier_type == 'NN':
+                    json_dict['capacity_utilized_by_nn'] = cap_utilized # noqa
             else:
                 if classifier_type == 'NN':
                     print("Classifier Type:                    Neural Network")
@@ -615,6 +591,8 @@ if __name__ == "__main__":
                 print("Model accuracy:                     {:.2f}%".format(modelacc) + " (" + str(int(num_correct)) + "/" + str(count) + " correct)")
                 print("Improvement over best guess:        {:.2f}%".format(modelacc - randguess) + " (of possible " + str(round(100 - randguess, 2)) + "%)")
                 print("Model capacity (MEC):               {:.0f} bits".format(model_cap))
+                if classifier_type == 'NN':
+                    print("Model Capacity Utilized:            {:.0f} bits".format(cap_utilized)) # noqa              
                 print("Generalization ratio:               {:.2f}".format(int(float(num_correct * 100) / model_cap) / 100.0 * H) + " bits/bit")
                 print("Model efficiency:                   {:.2f}%/parameter".format(int(100 * (modelacc - randguess) / model_cap) / 100.0))
 
@@ -636,12 +614,12 @@ if __name__ == "__main__":
 
             for class_i in range(n_labels):
                 stats[class_i] = {'TP':{},'FP':{},'FN':{},'TN':{}}
-                class_i_indices = np.argwhere(y_true==class_i)
-                not_class_i_indices = np.argwhere(y_true!=class_i)
-                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices]==y_true[class_i_indices]))
-                stats[int(class_i)]['FP'] = int(np.sum(y_pred[class_i_indices]!=y_true[class_i_indices]))
-                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices]==y_true[not_class_i_indices]))
-                stats[int(class_i)]['FN'] = int(np.sum(y_pred[not_class_i_indices]!=y_true[not_class_i_indices]))
+                class_i_indices = np.argwhere(y_true==class_i) #indices with bus(call class_i=bus in this example)
+                not_class_i_indices = np.argwhere(y_true!=class_i) #indices with not bus
+                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices] == class_i)) #indices where bus, and we predict == bus
+                stats[int(class_i)]['FN'] = int(np.sum(y_pred[class_i_indices] != class_i)) #indices where bus, and we predict != bus
+                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices] != class_i)) #indices with not bus, where we predict != bus
+                stats[int(class_i)]['FP'] = int(np.sum(y_pred[not_class_i_indices] == class_i)) #indices where not bus, we predict as bus
             #check for numpy/scipy is imported
             try:
                 from scipy.sparse import coo_matrix #required for multiclass metrics

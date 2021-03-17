@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
-# This code has been produced by a free evaluation version of Daimensions(tm).
-# Portions of this code copyright (c) 2019, 2020 by Brainome, Inc. All Rights Reserved.
+# This code has been produced by a free evaluation version of Brainome Table Compiler(tm).
+# Portions of this code copyright (c) 2019-2021 by Brainome, Inc. All Rights Reserved.
 # Brainome grants an exclusive (subject to our continuing rights to use and modify models),
 # worldwide, non-sublicensable, and non-transferable limited license to use and modify this
 # predictor produced through the input of your data:
@@ -12,9 +12,9 @@
 # Please contact support@brainome.ai with any questions.
 # Use of predictions results at your own risk.
 #
-# Output of Brainome Daimensions(tm) 0.991 Table Compiler v0.99.
+# Output of Brainome Table Compiler v0.991.
 # Invocation: btc -v -v -f NN titanic_train.csv -o titanic_predict_igcol.py -target Survived -ignorecolumns PassengerId,Name,Ticket,Cabin,Embarked -e 10 --yes
-# Total compiler execution time: 0:12:43.76. Finished on: Mar-05-2021 18:08:48.
+# Total compiler execution time: 0:13:04.69. Finished on: Mar-17-2021 08:52:30.
 # This source code requires Python 3.
 #
 """
@@ -26,9 +26,10 @@ Training accuracy:                   78.87% (351/445 correct)
 Validation accuracy:                 82.06% (366/446 correct)
 Overall Model accuracy:              80.47% (717/891 correct)
 Overall Improvement over best guess: 18.86% (of possible 38.39%)
-Model capacity (MEC):                1 bits
-Generalization ratio:                337.31 bits/bit
-Model efficiency:                    18.86%/parameter
+Model capacity (MEC):                17 bits
+Model Capacity Utilized:             1 bits
+Generalization ratio:                19.84 bits/bit
+Model efficiency:                    1.10%/parameter
 System behavior
 True Negatives:                      55.56% (495/891)
 True Positives:                      24.92% (222/891)
@@ -43,8 +44,8 @@ Critical Success Index:              0.56
 Confusion Matrix:
  [55.56% 6.06%]
  [13.47% 24.92%]
-Generalization index:                166.08
-Percent of Data Memorized:           0.60%
+Avg. noise resilience per instance:  -1.31dB
+Percent of Data Memorized:           10.24%
 """
 
 # Imports -- Python3 standard library
@@ -409,13 +410,17 @@ def single_classify(row, return_probabilities=False):
     #Output Decision Rule
     if num_output_logits==1:
         if return_probabilities:
-            exp_o = 1./(1. + np.exp(-o[0]))
+            if o[0] < 0:
+                exp_o = 1. - 1./(1. + np.exp(o[0]))
+            else:
+                exp_o = 1./(1. + np.exp(-o[0]))
             return np.array([1.-exp_o, exp_o])
         else:
             return o[0]>=0
     else:
         if return_probabilities:
-            exps = np.exp(o)
+            max_val = np.max(o)
+            exps = np.exp(o - max_val)
             Z = sum(exps).reshape(-1, 1)
             return exps/Z
         else:
@@ -430,31 +435,38 @@ def classify(arr, transform_true=False, return_probabilities=False):
     w_h = np.array([[-1.6335792541503906, -1.4121623039245605, -0.6373418569564819, -0.3335534334182739, 0.23223108053207397, -5.647202968597412], [-1.6462064981460571, -4.283102512359619, 0.0009361945558339357, -0.21904440224170685, -0.3540121018886566, 0.0020779678598046303]])
     b_h = np.array([-0.7058681845664978, 7.594517230987549])
     w_o = np.array([[0.04536890983581543, 0.9092615842819214]])
-    b_o = np.array(-1.8505855798721313)
-
-    #Hidden Layer
-    h = np.dot(arr, w_h.T) + b_h
+    b_o = np.array(-1.8505855798721313)        
     
-    relu = np.maximum(h, np.zeros_like(h))
-
-
+    if w_o.tolist():
+        h = np.dot(arr, w_h.T) + b_h
+        relu = np.maximum(h, np.zeros_like(h))
+        out = np.dot(relu, w_o.T) + b_o
+    else:
+        out = np.dot(arr, w_h.T) + b_h
+    
     #Output
-    out = np.dot(relu, w_o.T) + b_o
     if num_output_logits == 1:
         if return_probabilities:
-            exp_o = 1./(1. + np.exp(-out))
+            exp_o = np.zeros((out.shape[0],))
+            idxs_negative = np.argwhere(out < 0.).reshape(-1)
+            if idxs_negative.shape[0] > 0:
+                exp_o[idxs_negative] = 1. - 1./(1. + np.exp(out[idxs_negative])).reshape(-1)
+            idxs_positive = np.argwhere(out >= 0.).reshape(-1)
+            if idxs_positive.shape[0] > 0:
+                exp_o[idxs_positive] = 1./(1. + np.exp(-out[idxs_positive])).reshape(-1)
+            exp_o = exp_o.reshape(-1, 1)
             return np.concatenate((1.-exp_o, exp_o), axis=1)
         else:
             return (out >= 0).astype('int').reshape(-1)
     else:
         if return_probabilities:
-            exps = np.exp(out)
+            max_vals = np.tile(np.max(out, axis=1).reshape(-1, 1), out.shape[1])
+            exps = np.exp(out - max_vals)
             Z = np.sum(exps, axis=1).reshape(-1, 1)
             return exps/Z
         else:
             return (np.argmax(out, axis=1)).reshape(-1)
-
-
+    
 
 def Predict(arr,headerless,csvfile, get_key, classmapping):
     with open(csvfile, 'r', encoding='utf-8') as csvinput:
@@ -475,41 +487,20 @@ def Predict(arr,headerless,csvfile, get_key, classmapping):
 
 
 def Validate(cleanarr):
-    if n_classes == 2:
-        #note that classification is a single line of code
-        outputs = classify(cleanarr[:, :-1])
+    #note that classification is a single line of code 
+    outputs = classify(cleanarr[:, :-1]) 
+    #metrics 
+    count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0 = 0, 0, 0, 0, 0, 0, 0, 0 
+    correct_count = int(np.sum(outputs.reshape(-1) == cleanarr[:, -1].reshape(-1))) 
+    count = outputs.shape[0] 
+    num_TP = int(np.sum(np.logical_and(outputs.reshape(-1) == 1, cleanarr[:, -1].reshape(-1) == 1))) 
+    num_TN = int(np.sum(np.logical_and(outputs.reshape(-1) == 0, cleanarr[:, -1].reshape(-1) == 0))) 
+    num_FN = int(np.sum(np.logical_and(outputs.reshape(-1) == 0, cleanarr[:, -1].reshape(-1) == 1))) 
+    num_FP = int(np.sum(np.logical_and(outputs.reshape(-1) == 1, cleanarr[:, -1].reshape(-1) == 0))) 
+    num_class_0 = int(np.sum(cleanarr[:, -1].reshape(-1) == 0)) 
+    num_class_1 = int(np.sum(cleanarr[:, -1].reshape(-1) == 1)) 
+    return count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0, outputs
 
-
-        #metrics
-        count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0 = 0, 0, 0, 0, 0, 0, 0, 0
-        correct_count = int(np.sum(outputs.reshape(-1) == cleanarr[:, -1].reshape(-1)))
-        count = outputs.shape[0]
-        num_TP = int(np.sum(np.logical_and(outputs.reshape(-1) == 1, cleanarr[:, -1].reshape(-1) == 1)))
-        num_TN = int(np.sum(np.logical_and(outputs.reshape(-1) == 0, cleanarr[:, -1].reshape(-1) == 0)))
-        num_FN = int(np.sum(np.logical_and(outputs.reshape(-1) == 0, cleanarr[:, -1].reshape(-1) == 1)))
-        num_FP = int(np.sum(np.logical_and(outputs.reshape(-1) == 1, cleanarr[:, -1].reshape(-1) == 0)))
-        num_class_0 = int(np.sum(cleanarr[:, -1].reshape(-1) == 0))
-        num_class_1 = int(np.sum(cleanarr[:, -1].reshape(-1) == 1))
-        return count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0, outputs
-
-
-    else:
-        #validation
-        outputs = classify(cleanarr[:, :-1])
-
-
-        #metrics
-        count, correct_count = 0, 0
-        numeachclass = {}
-        for k, o in enumerate(outputs):
-            if int(o) == int(float(cleanarr[k, -1])):
-                correct_count += 1
-            if int(float(cleanarr[k, -1])) in numeachclass.keys():
-                numeachclass[int(float(cleanarr[k, -1]))] += 1
-            else:
-                numeachclass[int(float(cleanarr[k, -1]))] = 1
-            count += 1
-        return count, correct_count, numeachclass, outputs
     
 
 
@@ -570,16 +561,15 @@ if __name__ == "__main__":
     #Validate
     else:
         classifier_type = 'NN'
-        if n_classes == 2:
-            count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0, preds = Validate(cleanarr)
-        else:
-            count, correct_count, numeachclass, preds = Validate(cleanarr)
+        count, correct_count, num_TP, num_TN, num_FP, num_FN, num_class_1, num_class_0, preds = Validate(cleanarr)
         #Correct Labels
         true_labels = cleanarr[:, -1]
 
 
         #Report Metrics
-        model_cap = 1
+        model_cap = 17
+        cap_utilized = 1
+
         if args.json:
             import json
         if n_classes == 2:
@@ -633,6 +623,8 @@ if __name__ == "__main__":
                          'model_efficiency':                    int(100 * (modelacc - randguess) / model_cap) / 100.0,
                         'shannon_entropy_of_labels':           H,
                         'classbalance':                        classbalance}
+            if classifier_type == 'NN':
+                json_dict['capacity_utilized_by_nn'] = cap_utilized # noqa
             if args.json:
                 pass
             else:
@@ -647,6 +639,8 @@ if __name__ == "__main__":
                 print("Model accuracy:                     {:.2f}%".format(modelacc) + " (" + str(int(num_correct)) + "/" + str(count) + " correct)")
                 print("Improvement over best guess:        {:.2f}%".format(modelacc - randguess) + " (of possible " + str(round(100 - randguess, 2)) + "%)")
                 print("Model capacity (MEC):               {:.0f} bits".format(model_cap))
+                if classifier_type == 'NN':
+                    print("Model Capacity Utilized:            {:.0f} bits".format(cap_utilized)) # noqa
                 print("Generalization ratio:               {:.2f}".format(int(float(num_correct * 100) / model_cap) / 100.0 * H) + " bits/bit")
                 print("Model efficiency:                   {:.2f}%/parameter".format(int(100 * (modelacc - randguess) / model_cap) / 100.0))
                 print("System behavior")
@@ -689,6 +683,8 @@ if __name__ == "__main__":
                             'model_efficiency':                    int(100 * (modelacc - randguess) / model_cap) / 100.0,
                         'shannon_entropy_of_labels':           H,
                         'classbalance':                        classbalance}
+                if classifier_type == 'NN':
+                    json_dict['capacity_utilized_by_nn'] = cap_utilized # noqa
             else:
                 if classifier_type == 'NN':
                     print("Classifier Type:                    Neural Network")
@@ -701,6 +697,8 @@ if __name__ == "__main__":
                 print("Model accuracy:                     {:.2f}%".format(modelacc) + " (" + str(int(num_correct)) + "/" + str(count) + " correct)")
                 print("Improvement over best guess:        {:.2f}%".format(modelacc - randguess) + " (of possible " + str(round(100 - randguess, 2)) + "%)")
                 print("Model capacity (MEC):               {:.0f} bits".format(model_cap))
+                if classifier_type == 'NN':
+                    print("Model Capacity Utilized:            {:.0f} bits".format(cap_utilized)) # noqa              
                 print("Generalization ratio:               {:.2f}".format(int(float(num_correct * 100) / model_cap) / 100.0 * H) + " bits/bit")
                 print("Model efficiency:                   {:.2f}%/parameter".format(int(100 * (modelacc - randguess) / model_cap) / 100.0))
 
@@ -722,12 +720,12 @@ if __name__ == "__main__":
 
             for class_i in range(n_labels):
                 stats[class_i] = {'TP':{},'FP':{},'FN':{},'TN':{}}
-                class_i_indices = np.argwhere(y_true==class_i)
-                not_class_i_indices = np.argwhere(y_true!=class_i)
-                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices]==y_true[class_i_indices]))
-                stats[int(class_i)]['FP'] = int(np.sum(y_pred[class_i_indices]!=y_true[class_i_indices]))
-                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices]==y_true[not_class_i_indices]))
-                stats[int(class_i)]['FN'] = int(np.sum(y_pred[not_class_i_indices]!=y_true[not_class_i_indices]))
+                class_i_indices = np.argwhere(y_true==class_i) #indices with bus(call class_i=bus in this example)
+                not_class_i_indices = np.argwhere(y_true!=class_i) #indices with not bus
+                stats[int(class_i)]['TP'] = int(np.sum(y_pred[class_i_indices] == class_i)) #indices where bus, and we predict == bus
+                stats[int(class_i)]['FN'] = int(np.sum(y_pred[class_i_indices] != class_i)) #indices where bus, and we predict != bus
+                stats[int(class_i)]['TN'] = int(np.sum(y_pred[not_class_i_indices] != class_i)) #indices with not bus, where we predict != bus
+                stats[int(class_i)]['FP'] = int(np.sum(y_pred[not_class_i_indices] == class_i)) #indices where not bus, we predict as bus
             #check for numpy/scipy is imported
             try:
                 from scipy.sparse import coo_matrix #required for multiclass metrics
