@@ -23,7 +23,7 @@ print("Soft Probabilites for Each Row:")
 try:
 	from predictor import transform_true
 	arr = Normalize(arr)
-	o = classify(arr, transform=transform_true, soft_probabilities=True)
+	o = classify(arr, transform=transform_true, return_probabilities=True)
 	for prob in o:
 		print(list(prob))
 except:
