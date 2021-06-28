@@ -1,3 +1,0 @@
-The requirement of ffmpeg is because Librosa will fail to load .mp3 files (and certain other audio formats) without it. Additionally, 
-when running `python make_data.py` you may add `-W ignore` (i.e. `python -W ignore make_data.py`) in order to suppress warnings. This 
-will clean up the output as Librosa issues a warning whenever it resorts to ffmpeg for loading an audio file.
